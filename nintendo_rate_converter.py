@@ -84,7 +84,23 @@ def extract_price_and_currency(price_text: str, default_currency: str) -> tuple:
                 amount_str = groups[0]
 
             if amount_str:
-                amount_str = amount_str.replace(',', '')
+                # 智能处理逗号和点：判断哪个是小数点
+                # 规则：如果逗号在最后3位之前，或者点在最后3位之前，则为千位分隔符
+                # 如果逗号/点在最后2-3位，则为小数点
+
+                # 统一处理：找到最后一个逗号或点的位置
+                last_comma = amount_str.rfind(',')
+                last_dot = amount_str.rfind('.')
+
+                if last_comma > last_dot:
+                    # 逗号在后面，说明逗号是小数点（欧洲/拉美格式）
+                    # 例如：279,90 或 70.899,00
+                    amount_str = amount_str.replace('.', '').replace(',', '.')
+                else:
+                    # 点在后面或没有逗号，说明点是小数点（美国格式）
+                    # 例如：1,234.56 或 1234.56
+                    amount_str = amount_str.replace(',', '')
+
                 try:
                     amount = Decimal(amount_str)
                     return amount, currency
