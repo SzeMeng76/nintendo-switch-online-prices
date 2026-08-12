@@ -19,12 +19,12 @@ from playwright.async_api import async_playwright, Page
 NINTENDO_COUNTRIES = {
     # 亚太地区
     "JP": {"name": "Japan", "lang": "ja", "currency": "JPY"},
-    "HK": {"name": "Hong Kong", "lang": "en", "currency": "HKD"},
+    "HK": {"name": "Hong Kong", "lang": "zh", "currency": "HKD"},
     "KR": {"name": "South Korea", "lang": "ko", "currency": "KRW"},
     "SG": {"name": "Singapore", "lang": "en", "currency": "SGD"},
     "MY": {"name": "Malaysia", "lang": "en", "currency": "MYR"},
     "TH": {"name": "Thailand", "lang": "en", "currency": "THB"},
-    "TW": {"name": "Taiwan", "lang": "zh-Hant", "currency": "TWD"},
+    "TW": {"name": "Taiwan", "lang": "zh", "currency": "TWD"},
     "AU": {"name": "Australia", "lang": "en", "currency": "AUD"},
     "NZ": {"name": "New Zealand", "lang": "en", "currency": "NZD"},
 
@@ -84,9 +84,12 @@ def extract_prices_from_html(html: str, country_code: str) -> List[Dict[str, Any
     soup = BeautifulSoup(html, 'html.parser')
     plans = []
 
+    # 匹配货币符号和代码（显式列出所有支持的货币代码，避免误匹配任意3个大写字母）
+    # 日文特殊处理：支持"400円"格式
+    currency_codes = r'USD|EUR|GBP|JPY|CNY|HKD|SGD|MYR|THB|IDR|PHP|KRW|TWD|CAD|MXN|AUD|NZD|BRL|ARS|CLP|COP|PEN|ZAR|CHF|SEK|NOK|DKK|PLN|CZK|RUB|ILS'
     price_symbol_pattern = (
-        r'([' + CURRENCY_SYMBOLS + r']|[A-Z]{2,3})\s*([\d,\.]+)'
-        r'|([\d,\.]+)\s*([' + CURRENCY_SYMBOLS + r']|[A-Z]{2,3})'
+        r'(S\$|HK\$|NT\$|CA\$|NZ\$|AU\$|US\$|MX\$|A\$|R\$|RM\s*|Rp\s*|[' + CURRENCY_SYMBOLS + r']|' + currency_codes + r')\s*([\d,\.]+)'
+        r'|([\d,\.]+)\s*(S\$|HK\$|NT\$|CA\$|NZ\$|AU\$|US\$|MX\$|A\$|R\$|RM|Rp|円|[' + CURRENCY_SYMBOLS + r']|' + currency_codes + r')'
     )
 
     try:
@@ -108,34 +111,75 @@ def extract_prices_from_html(html: str, country_code: str) -> List[Dict[str, Any
             # 提取实际价格字符串（包含货币符号和数字）
             price_text = price_match.group(0)
 
-            # 获取更多上下文 - 查找父元素文本，帮助判断套餐类型和时长
-            context_text = elem_text
-            if elem.parent:
-                context_text += " " + elem.parent.get_text(' ', strip=True)[:300]
+            # 跳过"每月均价"说明文字（Equivalent to X per month, X/month, X per 30 days等）
+            if re.search(r'equivalent|per\s*month|per\s*30|/\s*month|/\s*30|月均|每月|一個月約|一个月约', elem_text, re.IGNORECASE):
+                continue
 
-            # 识别套餐类型
+
+            # 构建上下文：向上爬10层寻找套餐信息容器
+            context_parts = [elem_text]
+            current = elem.parent
+            for _ in range(10):
+                if current and current.name:
+                    parent_text = current.get_text(' ', strip=True)
+                    # 限制单个父元素不超过500字符（避免包含整页）
+                    if len(parent_text) < 500:
+                        context_parts.append(parent_text)
+                        current = current.parent
+                    else:
+                        break
+                else:
+                    break
+
+            context_text = " ".join(context_parts)[:800]
+
+            # 识别套餐类型：优先在当前元素查找，避免跨套餐混淆
             plan_type = "Unknown"
-            if re.search(r'\bfamily\b|家庭|familia|famille|familie', context_text, re.IGNORECASE):
+            if re.search(r'\bfamily\b|家庭|ファミリー|familia|famille|familie', elem_text, re.IGNORECASE):
+                plan_type = "Family"
+            elif re.search(r'\bindividual\b|個人|个人|personal|solo', elem_text, re.IGNORECASE):
+                plan_type = "Individual"
+            elif re.search(r'\bfamily\b|家庭|ファミリー|familia|famille|familie', context_text, re.IGNORECASE):
                 plan_type = "Family"
             elif re.search(r'\bindividual\b|個人|个人|personal|solo', context_text, re.IGNORECASE):
                 plan_type = "Individual"
 
-            # 识别时长（更精确）
+            # 识别时长：优先在当前元素查找
             duration = None
             duration_months = None
 
-            # 12 个月 / 1 年
-            if re.search(r'12\s*month|12\s*meses|12\s*mois|12\s*\u30f6\u6708|12\s*\u4e2a\u6708|1\s*year|1\s*a\u00f1o|1\s*jahr|\u5e74\u9593', context_text, re.IGNORECASE):
+            # 先在当前元素内查找（繁简体中文都支持，日文支持ヶ月和か月两种写法）
+            if re.search(r'12\s*month|12\s*meses|12\s*mois|12\s*ヶ月|12\s*か月|12\s*个月|12\s*個月|1\s*year|1\s*año|1\s*jahr|年間', elem_text, re.IGNORECASE):
                 duration = "12 months"
                 duration_months = 12
-            # 3 个月
-            elif re.search(r'3\s*month|3\s*meses|3\s*mois|3\s*ヶ月|3\s*个月', context_text, re.IGNORECASE):
+            elif re.search(r'3\s*month|3\s*meses|3\s*mois|3\s*ヶ月|3\s*か月|3\s*个月|3\s*個月', elem_text, re.IGNORECASE):
                 duration = "3 months"
                 duration_months = 3
-            # 1 个月
-            elif re.search(r'1\s*month|1\s*meses|1\s*mois|1\s*ヶ月|1\s*个月|monthly|mensual', context_text, re.IGNORECASE):
+            elif re.search(r'1\s*month|1\s*meses|1\s*mois|1\s*ヶ月|1\s*か月|1\s*个月|1\s*個月|monthly|mensual', elem_text, re.IGNORECASE):
                 duration = "1 month"
                 duration_months = 1
+
+            # 当前元素没找到时长才查上下文，但只在价格**前面**的文本内搜索（避免误匹配后续套餐）
+            if duration is None:
+                # 找价格在context_text中的位置
+                price_pos = context_text.find(price_text)
+                if price_pos >= 0:
+                    # 只在价格**前面**100字符范围内搜索时长（不包括后面的文本）
+                    start = max(0, price_pos - 100)
+                    local_context = context_text[start:price_pos + len(price_text)]
+                else:
+                    local_context = context_text[:len(context_text)//2]  # 前半部分
+
+                # 在局部上下文里搜索，按12/3/1顺序（繁简体中文都支持，日文支持ヶ月和か月两种写法）
+                if re.search(r'12\s*month|12\s*meses|12\s*mois|12\s*ヶ月|12\s*か月|12\s*个月|12\s*個月|1\s*year|1\s*año|1\s*jahr|年間', local_context, re.IGNORECASE):
+                    duration = "12 months"
+                    duration_months = 12
+                elif re.search(r'3\s*month|3\s*meses|3\s*mois|3\s*ヶ月|3\s*か月|3\s*个月|3\s*個月', local_context, re.IGNORECASE):
+                    duration = "3 months"
+                    duration_months = 3
+                elif re.search(r'1\s*month|1\s*meses|1\s*mois|1\s*ヶ月|1\s*か月|1\s*个月|1\s*個月|monthly|mensual', local_context, re.IGNORECASE):
+                    duration = "1 month"
+                    duration_months = 1
 
             # 只保留同时识别出套餐类型和时长的数据
             if plan_type != "Unknown" and duration:
@@ -145,13 +189,22 @@ def extract_prices_from_html(html: str, country_code: str) -> List[Dict[str, Any
                     'duration': duration,
                     'duration_months': duration_months,
                     'price': price_text,
-                    'raw_context': context_text[:200]  # 保留上下文，便于调试
+                    'raw_context': context_text[:200]
                 })
 
     except Exception as e:
         print(f"    WARNING - Parse error ({country_code}): {e}")
 
-    return plans
+    # 去重：同一个(价格, 套餐类型, 时长)组合只保留一个
+    seen = set()
+    unique_plans = []
+    for plan in plans:
+        key = (plan['price'], plan['plan_type'], plan['duration'])
+        if key not in seen:
+            seen.add(key)
+            unique_plans.append(plan)
+
+    return unique_plans
 
 
 async def fetch_country_prices(page: Page, country_code: str, country_info: Dict[str, str]) -> List[Dict[str, Any]]:
@@ -160,17 +213,11 @@ async def fetch_country_prices(page: Page, country_code: str, country_info: Dict
     url = f"https://ec.nintendo.com/{country_code}/{lang}/membership"
 
     try:
-        # 访问页面
-        await page.goto(url, wait_until='domcontentloaded', timeout=30000)
+        # 访问页面并等待网络空闲
+        await page.goto(url, wait_until='networkidle', timeout=60000)
 
-        # 等待页面渲染完成 - Nintendo 的价格通常需要等待 JavaScript 渲染
+        # 额外等待确保 JavaScript 完全执行
         await page.wait_for_timeout(3000)
-
-        # 等待可能包含价格的元素出现
-        try:
-            await page.wait_for_selector('div, span, p', timeout=5000)
-        except Exception:
-            pass
 
         # 获取页面 HTML
         html = await page.content()
@@ -210,25 +257,28 @@ async def main():
         browser = await p.chromium.launch(headless=True)
         context = await browser.new_context(
             viewport={'width': 1920, 'height': 1080},
-            user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         )
         page = await context.new_page()
 
-        print(f"Starting to scrape {len(NINTENDO_COUNTRIES)} countries/regions...")
+        print(f"Nintendo Switch Online Price Scraper")
+        print(f"Total countries/regions: {len(NINTENDO_COUNTRIES)}")
         print("=" * 80)
 
+        # 遍历所有国家
         for country_code, country_info in NINTENDO_COUNTRIES.items():
-            print(f"[{country_code}] {country_info['name']} ({country_info['currency']})...")
+            print(f"\n[{country_code}] {country_info['name']}...")
 
             plans = await fetch_country_prices(page, country_code, country_info)
 
             if plans:
-                results[country_code] = plans
                 print(f"    OK - Found {len(plans)} plans")
+                results[country_code] = plans
             else:
-                print("    WARN - No price data found")
+                print(f"    WARN - No plans found")
+                results[country_code] = []
 
-            # 添加延迟，避免请求过快
+            # 礼貌延迟，避免请求过快
             await asyncio.sleep(1)
 
         await browser.close()
@@ -237,22 +287,15 @@ async def main():
 
 
 if __name__ == '__main__':
-    print("Nintendo Switch Online Price Scraper")
-    print("=" * 80)
-
-    # 运行爬虫
-    all_prices = asyncio.run(main())
-
-    if not all_prices:
-        raise SystemExit("FAIL - No data scraped, aborting")
+    print("Starting scraper...")
+    results = asyncio.run(main())
 
     # 保存结果
     output_file = 'nintendo_prices.json'
-
     with open(output_file, 'w', encoding='utf-8') as f:
-        json.dump(all_prices, f, ensure_ascii=False, indent=2)
+        json.dump(results, f, ensure_ascii=False, indent=2)
 
+    print("\n" + "=" * 80)
+    print(f"OK - Saved to {output_file}")
+    print(f"Total countries scraped: {len(results)}")
     print("=" * 80)
-    print("OK - Scraping completed!")
-    print(f"Saved to: {output_file}")
-    print(f"Successfully scraped {len(all_prices)} countries/regions")

@@ -6,6 +6,11 @@ on:
     - cron: '0 0 * * 0'
   workflow_dispatch:  # 支持手动触发
 
+# 添加写入权限以允许推送到仓库
+permissions:
+  contents: write
+  actions: read
+
 jobs:
   scrape-prices:
     runs-on: ubuntu-latest
@@ -39,4 +44,11 @@ jobs:
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
           git add *.json
-          git diff --quiet && git diff --staged --quiet || (git commit -m "chore: update Nintendo Switch Online prices - $(date +'%Y-%m-%d')" && git push)
+          if [ -n "$(git status --porcelain)" ]; then
+            git pull --rebase origin main || true
+            git commit -m "chore: update Nintendo Switch Online prices - $(date +'%Y-%m-%d')"
+            git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:main
+            echo "✅ 数据已提交到仓库"
+          else
+            echo "没有文件变化，跳过提交"
+          fi
