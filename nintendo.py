@@ -86,7 +86,7 @@ def extract_prices_from_html(html: str, country_code: str) -> List[Dict[str, Any
 
     price_symbol_pattern = (
         r'([' + CURRENCY_SYMBOLS + r']|[A-Z]{2,3})\s*([\d,\.]+)'
-        r'|(\d[\d,\.]+)\s*([' + CURRENCY_SYMBOLS + r']|[A-Z]{2,3})'
+        r'|([\d,\.]+)\s*([' + CURRENCY_SYMBOLS + r']|[A-Z]{2,3})'
     )
 
     try:
