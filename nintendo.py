@@ -1,0 +1,216 @@
+#!/usr/bin/env python3
+"""
+Nintendo Switch Online 价���爬虫 - ���进版
+���确识别套餐类型���时长，���建分���排行榜
+"""
+
+import re
+import asyncio
+import json
+import time
+from typing import Any, Dict, List
+from bs4 import BeautifulSoup
+from playwright.async_api import async_playwright, Browser, Page
+
+
+# Nintendo Switch Online 支持���国家/地区列表
+NINTENDO_COUNTRIES = {
+    # 亚洲
+    "JP": {"name": "Japan", "lang": "ja", "currency": "JPY"},
+    "HK": {"name": "Hong Kong", "lang": "en", "currency": "HKD"},
+    "KR": {"name": "South Korea", "lang": "ko", "currency": "KRW"},
+    "SG": {"name": "Singapore", "lang": "en", "currency": "SGD"},
+    "MY": {"name": "Malaysia", "lang": "en", "currency": "MYR"},
+    "TH": {"name": "Thailand", "lang": "en", "currency": "THB"},
+    "ID": {"name": "Indonesia", "lang": "en", "currency": "IDR"},
+    "PH": {"name": "Philippines", "lang": "en", "currency": "PHP"},
+    "TW": {"name": "Taiwan", "lang": "zh-Hant", "currency": "TWD"},
+
+    # 北美
+    "US": {"name": "United States", "lang": "en", "currency": "USD"},
+    "CA": {"name": "Canada", "lang": "en", "currency": "CAD"},
+    "MX": {"name": "Mexico", "lang": "es", "currency": "MXN"},
+
+    # 欧洲
+    "GB": {"name": "United Kingdom", "lang": "en", "currency": "GBP"},
+    "DE": {"name": "Germany", "lang": "de", "currency": "EUR"},
+    "FR": {"name": "France", "lang": "fr", "currency": "EUR"},
+    "ES": {"name": "Spain", "lang": "es", "currency": "EUR"},
+    "IT": {"name": "Italy", "lang": "it", "currency": "EUR"},
+    "NL": {"name": "Netherlands", "lang": "nl", "currency": "EUR"},
+
+    # 大洋洲
+    "AU": {"name": "Australia", "lang": "en", "currency": "AUD"},
+    "NZ": {"name": "New Zealand", "lang": "en", "currency": "NZD"},
+
+    # 南美
+    "BR": {"name": "Brazil", "lang": "pt", "currency": "BRL"},
+    "AR": {"name": "Argentina", "lang": "es", "currency": "ARS"},
+}
+
+
+def extract_prices_from_html(html: str, country_code: str) -> List[Dict[str, Any]]:
+    """从页面 HTML 中提���价格信���，���确识别套餐类���和时长"""
+    soup = BeautifulSoup(html, 'html.parser')
+    plans = []
+
+    try:
+        # ���取完整���本用���上下文分析
+        full_text = soup.get_text()
+
+        # 查找���有可���包���价格的���本节点
+        all_elements = soup.find_all(['div', 'span', 'p', 'td', 'th', 'li', 'button', 'a'])
+
+        for elem in all_elements:
+            elem_text = elem.get_text(' ', strip=True)
+
+            # 跳过���长或太短的���本
+            if len(elem_text) > 500 or len(elem_text) < 3:
+                continue
+
+            # 检���是否包含价格
+            price_match = re.search(r'([\$€£¥���₱₪₨₦₵���₩]|[A-Z]{2,3})\s*([\d,\.]+)|(\d[\d,\.]+)\s*([\$���£¥₹₱₪₨₦₵���₩]|[A-Z]{2,3})', elem_text)
+            if not price_match:
+                continue
+
+            price_text = elem_text
+
+            # 获取更多上下文 - ���找���元素和���弟���素
+            context_text = elem_text
+            if elem.parent:
+                context_text += " " + elem.parent.get_text(' ', strip=True)[:300]
+
+            # 识别套餐类型
+            plan_type = "Unknown"
+            if re.search(r'\bfamily\b|\b家庭\b|\bfamilia\b|\bfamille\b|\bfamilie\b', context_text, re.IGNORECASE):
+                plan_type = "Family"
+            elif re.search(r'\bindividual\b|\b個人\b|\b个���\b|\bpersonal\b|\bsolo\b', context_text, re.IGNORECASE):
+                plan_type = "Individual"
+
+            # ���别时���（更精确）
+            duration = None
+            duration_months = None
+
+            # 12个���/1年
+            if re.search(r'12\s*month|12\s*meses|12\s*mois|12\s*���月|12\s*个月|1\s*year|1\s*año|1\s*jahr|年間', context_text, re.IGNORECASE):
+                duration = "12 months"
+                duration_months = 12
+            # 3个月
+            elif re.search(r'3\s*month|3\s*meses|3\s*mois|3\s*ヶ���|3\s*个月', context_text, re.IGNORECASE):
+                duration = "3 months"
+                duration_months = 3
+            # 1个月
+            elif re.search(r'1\s*month|1\s*meses|1\s*mois|1\s*ヶ月|1\s*个月|monthly|mensual', context_text, re.IGNORECASE):
+                duration = "1 month"
+                duration_months = 1
+
+            # 只���留识别出套餐类型和时���的数据
+            if plan_type != "Unknown" and duration:
+                plans.append({
+                    'plan': f"{plan_type} - {duration}",
+                    'plan_type': plan_type,
+                    'duration': duration,
+                    'duration_months': duration_months,
+                    'price': price_text,
+                    'raw_context': context_text[:200]  # 保留上���文用于调试
+                })
+
+    except Exception as e:
+        print(f"    WARNING - Parse error ({country_code}): {e}")
+
+    return plans
+
+
+async def fetch_country_prices(page: Page, country_code: str, country_info: Dict[str, str]) -> List[Dict[str, Any]]:
+    """获���指定国家的价格信息"""
+    lang = country_info['lang']
+    url = f"https://ec.nintendo.com/{country_code}/{lang}/membership"
+
+    try:
+        # 访问页面
+        await page.goto(url, wait_until='domcontentloaded', timeout=30000)
+
+        # 等待页���加���完成 - Nintendo 的���格通常需要等待 JavaScript 渲染
+        await page.wait_for_timeout(3000)
+
+        # 等待可能包含价格的元素
+        try:
+            await page.wait_for_selector('div, span, p', timeout=5000)
+        except:
+            pass
+
+        # 获取���面 HTML
+        html = await page.content()
+
+        # 提���价格信息
+        plans = extract_prices_from_html(html, country_code)
+
+        # 为每个���餐���加国家���息
+        for plan in plans:
+            plan['country_code'] = country_code
+            plan['country_name'] = country_info['name']
+            plan['currency'] = country_info['currency']
+            plan['url'] = url
+
+        return plans
+
+    except Exception as e:
+        print(f"    FAIL - Fetch failed ({country_code}): {e}")
+        return []
+
+
+async def main():
+    """主函���"""
+    results: Dict[str, Any] = {}
+
+    async with async_playwright() as p:
+        # 启动���览���
+        browser = await p.chromium.launch(headless=True)
+        context = await browser.new_context(
+            viewport={'width': 1920, 'height': 1080},
+            user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        )
+        page = await context.new_page()
+
+        print(f"Starting to scrape {len(NINTENDO_COUNTRIES)} countries/regions...")
+        print("=" * 80)
+
+        for country_code, country_info in NINTENDO_COUNTRIES.items():
+            print(f"[{country_code}] {country_info['name']} ({country_info['currency']})...")
+
+            plans = await fetch_country_prices(page, country_code, country_info)
+
+            if plans:
+                results[country_code] = plans
+                print(f"    OK - Found {len(plans)} plans")
+            else:
+                print(f"    WARN - No price data found")
+
+            # 添加延���避免���求���快
+            await asyncio.sleep(1)
+
+        await browser.close()
+
+    return results
+
+
+if __name__ == '__main__':
+    print("Nintendo Switch Online Price Scraper")
+    print("=" * 80)
+
+    # 运���爬虫
+    all_prices = asyncio.run(main())
+
+    if not all_prices:
+        raise SystemExit("FAIL - No data scraped, aborting")
+
+    # 保存结果
+    output_file = 'nintendo_prices.json'
+
+    with open(output_file, 'w', encoding='utf-8') as f:
+        json.dump(all_prices, f, ensure_ascii=False, indent=2)
+
+    print("=" * 80)
+    print(f"OK - Scraping completed!")
+    print(f"Saved to: {output_file}")
+    print(f"Successfully scraped {len(all_prices)} countries/regions")

@@ -1,0 +1,10 @@
+.env
+*.pyc
+__pycache__/
+.pytest_cache/
+.vscode/
+.idea/
+*.json
+!.env.example
+archive/
+changelog_archive/
