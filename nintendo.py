@@ -14,8 +14,8 @@ from playwright.async_api import async_playwright, Page
 
 
 # Nintendo Switch Online 支持的国家/地区列表
-# 基于 Nintendo eShop 官方可用地区整理（共 49 个市场），
-# 参考 en.wikipedia.org/wiki/Nintendo_eShop 及 Nintendo 官方地区支持页交叉核对
+# 基于 Nintendo eShop 官方可用地区整理（共 49 个市场）：
+# 亚太 9 个、美洲 8 个、欧洲 30 个、中东与非洲 2 个
 NINTENDO_COUNTRIES = {
     # 亚太地区
     "JP": {"name": "Japan", "lang": "ja", "currency": "JPY"},
@@ -27,9 +27,6 @@ NINTENDO_COUNTRIES = {
     "TW": {"name": "Taiwan", "lang": "zh-Hant", "currency": "TWD"},
     "AU": {"name": "Australia", "lang": "en", "currency": "AUD"},
     "NZ": {"name": "New Zealand", "lang": "en", "currency": "NZD"},
-    # PH 在 Nintendo 官方支持页有列出，但 Wikipedia 标注为“即将上线”，
-    # 保留在列表中用于测试，实际结果需要核实
-    "PH": {"name": "Philippines", "lang": "en", "currency": "PHP"},
 
     # 美洲
     "US": {"name": "United States", "lang": "en", "currency": "USD"},
@@ -60,7 +57,6 @@ NINTENDO_COUNTRIES = {
     "GR": {"name": "Greece", "lang": "en", "currency": "EUR"},
     "HU": {"name": "Hungary", "lang": "en", "currency": "HUF"},
     "IE": {"name": "Ireland", "lang": "en", "currency": "EUR"},
-    "IL": {"name": "Israel", "lang": "en", "currency": "ILS"},
     "LV": {"name": "Latvia", "lang": "en", "currency": "EUR"},
     "LT": {"name": "Lithuania", "lang": "en", "currency": "EUR"},
     "LU": {"name": "Luxembourg", "lang": "en", "currency": "EUR"},
@@ -74,7 +70,8 @@ NINTENDO_COUNTRIES = {
     "SE": {"name": "Sweden", "lang": "sv", "currency": "SEK"},
     "CH": {"name": "Switzerland", "lang": "de", "currency": "CHF"},
 
-    # 非洲
+    # 中东与非洲
+    "IL": {"name": "Israel", "lang": "en", "currency": "ILS"},
     "ZA": {"name": "South Africa", "lang": "en", "currency": "ZAR"},
 }
 
