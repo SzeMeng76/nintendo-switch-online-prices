@@ -47,7 +47,7 @@ NINTENDO_COUNTRIES = {
     "NL": {"name": "Netherlands", "lang": "nl", "currency": "EUR"},
     "AT": {"name": "Austria", "lang": "de", "currency": "EUR"},
     "BE": {"name": "Belgium", "lang": "en", "currency": "EUR"},
-    "BG": {"name": "Bulgaria", "lang": "en", "currency": "BGN"},
+    "BG": {"name": "Bulgaria", "lang": "en", "currency": "EUR"},  # Nintendo uses EUR despite local BGN
     "HR": {"name": "Croatia", "lang": "en", "currency": "EUR"},
     "CY": {"name": "Cyprus", "lang": "en", "currency": "EUR"},
     "CZ": {"name": "Czech Republic", "lang": "cs", "currency": "CZK"},
@@ -55,7 +55,7 @@ NINTENDO_COUNTRIES = {
     "EE": {"name": "Estonia", "lang": "en", "currency": "EUR"},
     "FI": {"name": "Finland", "lang": "fi", "currency": "EUR"},
     "GR": {"name": "Greece", "lang": "en", "currency": "EUR"},
-    "HU": {"name": "Hungary", "lang": "en", "currency": "HUF"},
+    "HU": {"name": "Hungary", "lang": "en", "currency": "EUR"},  # Nintendo uses EUR despite local HUF
     "IE": {"name": "Ireland", "lang": "en", "currency": "EUR"},
     "LV": {"name": "Latvia", "lang": "en", "currency": "EUR"},
     "LT": {"name": "Lithuania", "lang": "en", "currency": "EUR"},
@@ -64,7 +64,7 @@ NINTENDO_COUNTRIES = {
     "NO": {"name": "Norway", "lang": "no", "currency": "NOK"},
     "PL": {"name": "Poland", "lang": "pl", "currency": "PLN"},
     "PT": {"name": "Portugal", "lang": "pt", "currency": "EUR"},
-    "RO": {"name": "Romania", "lang": "en", "currency": "RON"},
+    "RO": {"name": "Romania", "lang": "en", "currency": "EUR"},  # Nintendo uses EUR despite local RON
     "SK": {"name": "Slovakia", "lang": "en", "currency": "EUR"},
     "SI": {"name": "Slovenia", "lang": "en", "currency": "EUR"},
     "SE": {"name": "Sweden", "lang": "sv", "currency": "SEK"},
@@ -207,6 +207,88 @@ def extract_prices_from_html(html: str, country_code: str) -> List[Dict[str, Any
     return unique_plans
 
 
+def extract_prices_from_text(text: str, country_code: str) -> List[Dict[str, Any]]:
+    """从渲染后的纯文本中提取价格信息（备用方法，用于动态页面）"""
+    plans = []
+
+    # 货币符号和代码
+    currency_codes = r'USD|EUR|GBP|JPY|CNY|HKD|SGD|MYR|THB|IDR|PHP|KRW|TWD|CAD|MXN|AUD|NZD|BRL|ARS|CLP|COP|PEN|ZAR|CHF|SEK|NOK|DKK|PLN|CZK|RUB|ILS'
+    price_pattern = (
+        r'(S\$|HK\$|NT\$|CA\$|NZ\$|AU\$|US\$|MX\$|A\$|R\$|RM\s*|Rp\s*|[' + CURRENCY_SYMBOLS + r']|' + currency_codes + r')\s*([\d,\.]+)'
+        r'|([\d,\.]+)\s*(S\$|HK\$|NT\$|CA\$|NZ\$|AU\$|US\$|MX\$|A\$|R\$|RM|Rp|円|[' + CURRENCY_SYMBOLS + r']|' + currency_codes + r')'
+    )
+
+    # 按行分割文本
+    lines = text.split('\n')
+
+    # 查找价格所在行的上下文（前后各3行）
+    for i, line in enumerate(lines):
+        price_match = re.search(price_pattern, line.strip())
+        if not price_match:
+            continue
+
+        # 跳过"相当于每月"、"折扣"等派生价格和说明文本
+        if re.search(r'entspricht|equivalent|equivale|équivaut|相当于|rabatt|discount|descuento|remise|割引|tag/|day/|día/', line, re.IGNORECASE):
+            continue
+
+        # 提取价格文本
+        price_text = line.strip()
+
+        # 获取上下文（前5行到后2行，重点向上查找套餐标题）
+        context_start = max(0, i - 5)
+        context_end = min(len(lines), i + 3)
+        context_lines = lines[context_start:context_end]
+        context_text = ' '.join(l.strip() for l in context_lines if l.strip())
+
+        # 识别套餐类型
+        plan_type = 'Individual'
+        family_pattern = re.compile(r'family|famil|familia|famille|familie|家庭|ファミリー', re.IGNORECASE)
+        if family_pattern.search(context_text):
+            plan_type = 'Family'
+
+        # 识别时长
+        duration = 'Unknown'
+        duration_months = 1
+
+        # 12个月
+        if re.search(r'12\s*month|12\s*mes|12\s*mois|12\s*monate|12\s*månader|12\s*mies|12\s*mån|12.*month|12.*mes|365\s*day|12.*個月|12.*个月|12.*ヶ月', context_text, re.IGNORECASE):
+            duration = '12 months'
+            duration_months = 12
+        # 3个月
+        elif re.search(r'3\s*month|3\s*mes|3\s*mois|3\s*monate|3\s*månader|3\s*mies|3\s*mån|90\s*day|3.*month|3.*mes|3.*個月|3.*个月|3.*ヶ月', context_text, re.IGNORECASE):
+            duration = '3 months'
+            duration_months = 3
+        # 1个月
+        elif re.search(r'1\s*month|1\s*mes|1\s*mois|1\s*monat|1\s*månad|30\s*day|1.*month|1.*mes|1.*個月|1.*个月|1.*ヶ月', context_text, re.IGNORECASE):
+            duration = '1 month'
+            duration_months = 1
+
+        # 构建套餐名称
+        plan_name = f"{plan_type} - {duration}"
+        if 'expansion' in context_text.lower() or 'erweiterung' in context_text.lower() or '追加' in context_text:
+            plan_name += ' + Expansion Pack'
+
+        plans.append({
+            'plan': plan_name,
+            'plan_type': plan_type,
+            'duration': duration,
+            'duration_months': duration_months,
+            'price': price_text,
+            'raw_context': context_text[:300]
+        })
+
+    # 去重
+    seen = set()
+    unique_plans = []
+    for plan in plans:
+        key = (plan['price'], plan['plan_type'], plan['duration'])
+        if key not in seen:
+            seen.add(key)
+            unique_plans.append(plan)
+
+    return unique_plans
+
+
 async def fetch_country_prices(page: Page, country_code: str, country_info: Dict[str, str]) -> List[Dict[str, Any]]:
     """获取指定国家的价格信息"""
     lang = country_info['lang']
@@ -224,6 +306,11 @@ async def fetch_country_prices(page: Page, country_code: str, country_info: Dict
 
         # 提取价格信息
         plans = extract_prices_from_html(html, country_code)
+
+        # 如果HTML提取失败，尝试从渲染后的文本提取（某些页面价格是动态插入的）
+        if not plans:
+            body_text = await page.locator('body').inner_text()
+            plans = extract_prices_from_text(body_text, country_code)
 
         # 为每个套餐附加国家信息
         for plan in plans:
