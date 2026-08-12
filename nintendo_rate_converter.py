@@ -59,8 +59,8 @@ def extract_price_and_currency(price_text: str, default_currency: str) -> tuple:
     patterns = [
         r'([A-Z]{3})\s*([\d,\.]+)',
         r'([\d,\.]+)\s*([A-Z]{3})',
-        r'([\$€£��₹���₩])\s*([\d,\.]+)',
-        r'([\d,\.]+)\s*([\$€£¥₹���₩])',
+        r'([\$€£¥₹₱₩])\s*([\d,\.]+)',
+        r'([\d,\.]+)\s*([\$€£¥₹₱₩])',
         r'([\d,\.]+)',
     ]
 

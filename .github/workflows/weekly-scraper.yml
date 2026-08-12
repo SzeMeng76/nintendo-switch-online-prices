@@ -2,9 +2,9 @@ name: Weekly Nintendo Switch Online Price Scraper
 
 on:
   schedule:
-    # 每周日 UTC 0:00 运行（���京时间周日���午 8:00）
+    # 每周日 UTC 0:00 运行（北京时间周日上午 8:00）
     - cron: '0 0 * * 0'
-  workflow_dispatch:  # 支持���动���发
+  workflow_dispatch:  # 支持手动触发
 
 jobs:
   scrape-prices:

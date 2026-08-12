@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Nintendo Switch Online 价格爬���测���脚���
-快速���试几个���家的价格抓取是否���常
+Nintendo Switch Online 价格爬虫测试脚本
+快速测试几个国家的价格抓取是否正常
 """
 
 import asyncio
@@ -10,11 +10,11 @@ from playwright.async_api import async_playwright
 
 
 async def test_scraper():
-    """���试爬���功能"""
-    print("���� Nintendo Switch Online 爬���测试")
+    """测试爬虫功能"""
+    print("Nintendo Switch Online 爬虫测试")
     print("=" * 80)
 
-    # 选择���个代表���国���进行测试
+    # 选择几个代表性国家进行测试
     test_countries = {
         "US": NINTENDO_COUNTRIES["US"],
         "JP": NINTENDO_COUNTRIES["JP"],
@@ -22,12 +22,12 @@ async def test_scraper():
         "SG": NINTENDO_COUNTRIES["SG"],
     }
 
-    print(f"\n📋 ���测试 {len(test_countries)} 个���家/地区:")
+    print(f"\n将测试 {len(test_countries)} 个国家/地区:")
     for code, info in test_countries.items():
         print(f"  - {code}: {info['name']} ({info['currency']})")
 
     print("\n" + "=" * 80)
-    print("🚀 ���始测试...\n")
+    print("开始测试...\n")
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
@@ -41,19 +41,19 @@ async def test_scraper():
         fail_count = 0
 
         for country_code, country_info in test_countries.items():
-            print(f"📍 [{country_code}] {country_info['name']}...")
+            print(f"[{country_code}] {country_info['name']}...")
 
             plans = await fetch_country_prices(page, country_code, country_info)
 
             if plans and len(plans) > 0:
-                print(f"    ✅ 成功抓取 {len(plans)} 个套餐")
+                print(f"    OK - 成功抓取 {len(plans)} 个套餐")
                 success_count += 1
 
-                # ���示前3个套���
+                # 显示前3个套餐
                 for i, plan in enumerate(plans[:3], 1):
-                    print(f"      {i}. {plan.get('plan', 'Unknown')}: {plan.get('price', 'N/A')}")
+                    print(f"      {i}. {plan.get('plan', 'Unknown')}: {plan.get('price', 'N/A')[:80]}")
             else:
-                print(f"    ❌ ���抓取到价���数据")
+                print("    FAIL - 未抓取到价格数据")
                 fail_count += 1
 
             print()
@@ -62,18 +62,18 @@ async def test_scraper():
         await browser.close()
 
         print("=" * 80)
-        print("📊 测试结果:")
-        print(f"  ✅ 成功: {success_count}/{len(test_countries)}")
-        print(f"  ❌ 失败: {fail_count}/{len(test_countries)}")
+        print("测试结果:")
+        print(f"  成功: {success_count}/{len(test_countries)}")
+        print(f"  失败: {fail_count}/{len(test_countries)}")
 
         if success_count == len(test_countries):
-            print("\n🎉 所有测���通过！���虫工作正常。")
+            print("\n所有测试通过！爬虫工作正常。")
             return True
         elif success_count > 0:
-            print("\n⚠️  ���分测���通过。请检���失败的国家。")
+            print("\n部分测试通过。请检查失败的国家。")
             return True
         else:
-            print("\n❌ ���有测���失败���请检���网���连接和页面结���。")
+            print("\n所有测试失败，请检查网络连接和页面结构。")
             return False
 
 
