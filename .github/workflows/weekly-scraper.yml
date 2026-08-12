@@ -46,7 +46,6 @@ jobs:
           git add *.json
           if [ -n "$(git status --porcelain)" ]; then
             git commit -m "chore: update Nintendo Switch Online prices - $(date +'%Y-%m-%d')"
-            git pull --rebase origin main
             git push
             echo "✅ 数据已提交到仓库"
           else
