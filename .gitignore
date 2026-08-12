@@ -6,5 +6,7 @@ __pycache__/
 .idea/
 *.json
 !.env.example
+!nintendo_prices.json
+!nintendo_prices_cny_sorted.json
 archive/
 changelog_archive/

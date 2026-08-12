@@ -101,10 +101,12 @@ def extract_prices_from_html(html: str, country_code: str) -> List[Dict[str, Any
                 continue
 
             # 检查是否包含价格
-            if not re.search(price_symbol_pattern, elem_text):
+            price_match = re.search(price_symbol_pattern, elem_text)
+            if not price_match:
                 continue
 
-            price_text = elem_text
+            # 提取实际价格字符串（包含货币符号和数字）
+            price_text = price_match.group(0)
 
             # 获取更多上下文 - 查找父元素文本，帮助判断套餐类型和时长
             context_text = elem_text
@@ -127,11 +129,11 @@ def extract_prices_from_html(html: str, country_code: str) -> List[Dict[str, Any
                 duration = "12 months"
                 duration_months = 12
             # 3 个月
-            elif re.search(r'3\s*month|3\s*meses|3\s*mois|3\s*\u30f6\u6708|3\s*\u4e2a\u6708', context_text, re.IGNORECASE):
+            elif re.search(r'3\s*month|3\s*meses|3\s*mois|3\s*ヶ月|3\s*个月', context_text, re.IGNORECASE):
                 duration = "3 months"
                 duration_months = 3
             # 1 个月
-            elif re.search(r'1\s*month|1\s*meses|1\s*mois|1\s*\u30f6\u6708|1\s*\u4e2a\u6708|monthly|mensual', context_text, re.IGNORECASE):
+            elif re.search(r'1\s*month|1\s*meses|1\s*mois|1\s*ヶ月|1\s*个月|monthly|mensual', context_text, re.IGNORECASE):
                 duration = "1 month"
                 duration_months = 1
 
