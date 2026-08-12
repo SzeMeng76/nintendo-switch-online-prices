@@ -45,9 +45,9 @@ jobs:
           git config --local user.name "github-actions[bot]"
           git add *.json
           if [ -n "$(git status --porcelain)" ]; then
-            git pull --rebase origin main || true
             git commit -m "chore: update Nintendo Switch Online prices - $(date +'%Y-%m-%d')"
-            git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:main
+            git pull --rebase origin main
+            git push
             echo "✅ 数据已提交到仓库"
           else
             echo "没有文件变化，跳过提交"
