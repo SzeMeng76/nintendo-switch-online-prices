@@ -185,7 +185,16 @@ async def fetch_country_prices(page: Page, country_code: str, country_info: Dict
             plan['currency'] = country_info['currency']
             plan['url'] = url
 
-        return plans
+        # 去重：相同的 (plan_type, duration_months, price) 只保留一个
+        seen = set()
+        unique_plans = []
+        for plan in plans:
+            key = (plan['plan_type'], plan['duration_months'], plan['price'])
+            if key not in seen:
+                seen.add(key)
+                unique_plans.append(plan)
+
+        return unique_plans
 
     except Exception as e:
         print(f"    FAIL - Fetch failed ({country_code}): {e}")
