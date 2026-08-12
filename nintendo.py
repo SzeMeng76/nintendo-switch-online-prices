@@ -111,8 +111,8 @@ def extract_prices_from_html(html: str, country_code: str) -> List[Dict[str, Any
             # 提取实际价格字符串（包含货币符号和数字）
             price_text = price_match.group(0)
 
-            # 跳过"每月均价"说明文字（Equivalent to X per month, X/month, X per 30 days等）
-            if re.search(r'equivalent|per\s*month|per\s*30|/\s*month|/\s*30|月均|每月|一個月約|一个月约', elem_text, re.IGNORECASE):
+            # 跳过"每月均价"说明文字（Equivalent to X per month, Pari a X al mese等）
+            if re.search(r'equivalent|per\s*month|per\s*30|/\s*month|/\s*30|pari\s+a|al\s+mese|月均|每月|一個月約|一个月约', elem_text, re.IGNORECASE):
                 continue
 
 
@@ -228,7 +228,7 @@ def extract_prices_from_text(text: str, country_code: str) -> List[Dict[str, Any
             continue
 
         # 跳过"相当于每月"、"折扣"等派生价格和说明文本
-        if re.search(r'entspricht|equivalent|equivale|équivaut|相当于|rabatt|discount|descuento|remise|割引|tag/|day/|día/', line, re.IGNORECASE):
+        if re.search(r'entspricht|equivalent|equivale|équivaut|pari\s+a|al\s+mese|相当于|rabatt|discount|descuento|remise|割引|tag/|day/|día/', line, re.IGNORECASE):
             continue
 
         # 提取价格文本
