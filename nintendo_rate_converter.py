@@ -218,6 +218,7 @@ def process_prices(input_data: Dict, rates: Dict[str, float]) -> Dict:
             plan_type = plan.get('plan_type', 'Unknown')
             duration = plan.get('duration', 'Unknown')
             duration_months = plan.get('duration_months', 1)
+            has_expansion_pack = plan.get('has_expansion_pack', False)
 
             amount, currency = extract_price_and_currency(price_text, default_currency)
 
@@ -234,6 +235,7 @@ def process_prices(input_data: Dict, rates: Dict[str, float]) -> Dict:
                         'plan_type': plan_type,
                         'duration': duration,
                         'duration_months': duration_months,
+                        'has_expansion_pack': has_expansion_pack,
                         'original_price': price_text,
                         'amount': float(amount),
                         'currency': currency,
@@ -254,17 +256,23 @@ def process_prices(input_data: Dict, rates: Dict[str, float]) -> Dict:
         if country_code in input_data:
             processed[country_code] = [p for p in all_plans if p['country_code'] == country_code]
 
-    # Filter by plan type and duration
-    individual_12m = [p for p in all_plans if p['plan_type'] == 'Individual' and p['duration_months'] == 12]
-    family_12m = [p for p in all_plans if p['plan_type'] == 'Family' and p['duration_months'] == 12]
+    # Filter by plan type, duration, and whether it bundles the Expansion Pack
+    individual_12m = [p for p in all_plans if p['plan_type'] == 'Individual' and p['duration_months'] == 12 and not p['has_expansion_pack']]
+    family_12m = [p for p in all_plans if p['plan_type'] == 'Family' and p['duration_months'] == 12 and not p['has_expansion_pack']]
+    individual_12m_expansion = [p for p in all_plans if p['plan_type'] == 'Individual' and p['duration_months'] == 12 and p['has_expansion_pack']]
+    family_12m_expansion = [p for p in all_plans if p['plan_type'] == 'Family' and p['duration_months'] == 12 and p['has_expansion_pack']]
 
     # Sort by per-month price
     individual_12m_sorted = sorted(individual_12m, key=lambda x: x['price_cny_per_month'])
     family_12m_sorted = sorted(family_12m, key=lambda x: x['price_cny_per_month'])
+    individual_12m_expansion_sorted = sorted(individual_12m_expansion, key=lambda x: x['price_cny_per_month'])
+    family_12m_expansion_sorted = sorted(family_12m_expansion, key=lambda x: x['price_cny_per_month'])
 
     result = {
         '_top_10_cheapest_individual_12month': individual_12m_sorted[:10] if len(individual_12m_sorted) >= 10 else individual_12m_sorted,
         '_top_10_cheapest_family_12month': family_12m_sorted[:10] if len(family_12m_sorted) >= 10 else family_12m_sorted,
+        '_top_10_cheapest_individual_12month_expansion_pack': individual_12m_expansion_sorted[:10] if len(individual_12m_expansion_sorted) >= 10 else individual_12m_expansion_sorted,
+        '_top_10_cheapest_family_12month_expansion_pack': family_12m_expansion_sorted[:10] if len(family_12m_expansion_sorted) >= 10 else family_12m_expansion_sorted,
         'by_country': processed
     }
 
@@ -304,6 +312,8 @@ def main():
     # Display rankings
     individual_top = processed_data.get('_top_10_cheapest_individual_12month', [])
     family_top = processed_data.get('_top_10_cheapest_family_12month', [])
+    individual_expansion_top = processed_data.get('_top_10_cheapest_individual_12month_expansion_pack', [])
+    family_expansion_top = processed_data.get('_top_10_cheapest_family_12month_expansion_pack', [])
 
     print("\n" + "=" * 80)
     print("OK - Conversion completed!")
@@ -318,6 +328,18 @@ def main():
         print(f"\nTOP 10 Cheapest Family 12-month:")
         print("-" * 80)
         for i, plan in enumerate(family_top, 1):
+            print(f"{i:2d}. {plan['country_name']:20s} | CNY {plan['price_cny_per_month']:6.2f}/mo | Total: CNY {plan['price_cny_total']:7.2f} | {plan['currency']} {plan['amount']}")
+
+    if individual_expansion_top:
+        print(f"\nTOP 10 Cheapest Individual 12-month + Expansion Pack:")
+        print("-" * 80)
+        for i, plan in enumerate(individual_expansion_top, 1):
+            print(f"{i:2d}. {plan['country_name']:20s} | CNY {plan['price_cny_per_month']:6.2f}/mo | Total: CNY {plan['price_cny_total']:7.2f} | {plan['currency']} {plan['amount']}")
+
+    if family_expansion_top:
+        print(f"\nTOP 10 Cheapest Family 12-month + Expansion Pack:")
+        print("-" * 80)
+        for i, plan in enumerate(family_expansion_top, 1):
             print(f"{i:2d}. {plan['country_name']:20s} | CNY {plan['price_cny_per_month']:6.2f}/mo | Total: CNY {plan['price_cny_total']:7.2f} | {plan['currency']} {plan['amount']}")
 
     print("=" * 80)

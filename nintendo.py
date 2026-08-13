@@ -78,6 +78,15 @@ NINTENDO_COUNTRIES = {
 # 价格符号字符集，用于正则匹配（美元/欧元/英镑/日元/卢比/比索/谢克尔/卢比(巴)/奈拉/塞地/科朗/韩元）
 CURRENCY_SYMBOLS = "\\$\u20ac\u00a3\u00a5\u20b9\u20b1\u20aa\u20a8\u20a6\u20b5\u20a1\u20a9"
 
+# Expansion Pack（追加内容包）关键词，覆盖各官网语言版本
+# 英/法/德/西/意/葡/日/中(简繁)/韩
+EXPANSION_PACK_PATTERN = re.compile(
+    r'expansion\s*pack|pack\s*additionnel|pass\s*additionnel|erweiterungspaket|erweiterung|'
+    r'paquete\s*de\s*expansi[oó]n|pacchetto\s*aggiuntivo|pacote\s*adicional|'
+    r'追加パック|追加内容包|追加內容包|扩充包|擴充包|추가팩',
+    re.IGNORECASE
+)
+
 
 def extract_prices_from_html(html: str, country_code: str) -> List[Dict[str, Any]]:
     """从页面 HTML 中提取价格信息，精确识别套餐类型和时长"""
@@ -181,13 +190,21 @@ def extract_prices_from_html(html: str, country_code: str) -> List[Dict[str, Any
                     duration = "1 month"
                     duration_months = 1
 
+            # 识别是否为 Expansion Pack 套餐（当前元素或上下文中出现关键词即可）
+            has_expansion_pack = bool(EXPANSION_PACK_PATTERN.search(elem_text) or EXPANSION_PACK_PATTERN.search(context_text))
+
             # 只保留同时识别出套餐类型和时长的数据
             if plan_type != "Unknown" and duration:
+                plan_name = f"{plan_type} - {duration}"
+                if has_expansion_pack:
+                    plan_name += " + Expansion Pack"
+
                 plans.append({
-                    'plan': f"{plan_type} - {duration}",
+                    'plan': plan_name,
                     'plan_type': plan_type,
                     'duration': duration,
                     'duration_months': duration_months,
+                    'has_expansion_pack': has_expansion_pack,
                     'price': price_text,
                     'raw_context': context_text[:200]
                 })
@@ -195,11 +212,11 @@ def extract_prices_from_html(html: str, country_code: str) -> List[Dict[str, Any
     except Exception as e:
         print(f"    WARNING - Parse error ({country_code}): {e}")
 
-    # 去重：同一个(价格, 套餐类型, 时长)组合只保留一个
+    # 去重：同一个(价格, 套餐类型, 时长, 是否含Expansion Pack)组合只保留一个
     seen = set()
     unique_plans = []
     for plan in plans:
-        key = (plan['price'], plan['plan_type'], plan['duration'])
+        key = (plan['price'], plan['plan_type'], plan['duration'], plan['has_expansion_pack'])
         if key not in seen:
             seen.add(key)
             unique_plans.append(plan)
@@ -265,7 +282,8 @@ def extract_prices_from_text(text: str, country_code: str) -> List[Dict[str, Any
 
         # 构建套餐名称
         plan_name = f"{plan_type} - {duration}"
-        if 'expansion' in context_text.lower() or 'erweiterung' in context_text.lower() or '追加' in context_text:
+        has_expansion_pack = bool(EXPANSION_PACK_PATTERN.search(context_text))
+        if has_expansion_pack:
             plan_name += ' + Expansion Pack'
 
         plans.append({
@@ -273,6 +291,7 @@ def extract_prices_from_text(text: str, country_code: str) -> List[Dict[str, Any
             'plan_type': plan_type,
             'duration': duration,
             'duration_months': duration_months,
+            'has_expansion_pack': has_expansion_pack,
             'price': price_text,
             'raw_context': context_text[:300]
         })
@@ -281,7 +300,7 @@ def extract_prices_from_text(text: str, country_code: str) -> List[Dict[str, Any
     seen = set()
     unique_plans = []
     for plan in plans:
-        key = (plan['price'], plan['plan_type'], plan['duration'])
+        key = (plan['price'], plan['plan_type'], plan['duration'], plan['has_expansion_pack'])
         if key not in seen:
             seen.add(key)
             unique_plans.append(plan)
@@ -319,11 +338,11 @@ async def fetch_country_prices(page: Page, country_code: str, country_info: Dict
             plan['currency'] = country_info['currency']
             plan['url'] = url
 
-        # 去重：相同的 (plan_type, duration_months, price) 只保留一个
+        # 去重：相同的 (plan_type, duration_months, price, has_expansion_pack) 只保留一个
         seen = set()
         unique_plans = []
         for plan in plans:
-            key = (plan['plan_type'], plan['duration_months'], plan['price'])
+            key = (plan['plan_type'], plan['duration_months'], plan['price'], plan.get('has_expansion_pack', False))
             if key not in seen:
                 seen.add(key)
                 unique_plans.append(plan)
