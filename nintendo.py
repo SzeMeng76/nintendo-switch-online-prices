@@ -87,6 +87,24 @@ EXPANSION_PACK_PATTERN = re.compile(
     re.IGNORECASE
 )
 
+# 各语言"不含/不带 Expansion Pack"的否定表述（免费试用/自动续费条款里常见），
+# 命中后要从待匹配文本中先剔除，避免把基础版套餐误判为含 Expansion Pack
+# （例如日文"追加パックなし"、繁体中文"不含擴充包"本身就包含 EXPANSION_PACK_PATTERN 的关键词）
+EXPANSION_PACK_NEGATION_PATTERN = re.compile(
+    r'(no|without|sans|sin|ohne|senza|sem|不含|不包含|不附)\s*'
+    r'(the\s+)?(expansion\s*pack|pack\s*additionnel|pass\s*additionnel|erweiterungspaket|erweiterung|'
+    r'paquete\s*de\s*expansi[oó]n|pacchetto\s*aggiuntivo|pacote\s*adicional|'
+    r'追加パック|追加内容包|追加內容包|扩充包|擴充包|추가팩)'
+    r'|(expansion\s*pack|추가팩|追加パック)\s*(なし|無し|미포함|없음)',
+    re.IGNORECASE
+)
+
+
+def text_has_expansion_pack(text: str) -> bool:
+    """判断文本中是否提到"含 Expansion Pack"，会先剔除各语言否定表述避免误判"""
+    cleaned = EXPANSION_PACK_NEGATION_PATTERN.sub(' ', text)
+    return bool(EXPANSION_PACK_PATTERN.search(cleaned))
+
 
 def extract_prices_from_html(html: str, country_code: str) -> List[Dict[str, Any]]:
     """从页面 HTML 中提取价格信息，精确识别套餐类型和时长"""
@@ -207,7 +225,7 @@ def extract_prices_from_html(html: str, country_code: str) -> List[Dict[str, Any
                     duration_months = 1
 
             # 识别是否为 Expansion Pack 套餐（当前元素或上下文中出现关键词即可）
-            has_expansion_pack = bool(EXPANSION_PACK_PATTERN.search(elem_text) or EXPANSION_PACK_PATTERN.search(context_text))
+            has_expansion_pack = text_has_expansion_pack(elem_text) or text_has_expansion_pack(context_text)
 
             # 只保留同时识别出套餐类型和时长的数据
             if plan_type != "Unknown" and duration:
@@ -298,7 +316,7 @@ def extract_prices_from_text(text: str, country_code: str) -> List[Dict[str, Any
 
         # 构建套餐名称
         plan_name = f"{plan_type} - {duration}"
-        has_expansion_pack = bool(EXPANSION_PACK_PATTERN.search(context_text))
+        has_expansion_pack = text_has_expansion_pack(context_text)
         if has_expansion_pack:
             plan_name += ' + Expansion Pack'
 
