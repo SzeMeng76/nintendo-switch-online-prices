@@ -158,7 +158,11 @@ def extract_prices_from_html(html: str, country_code: str) -> List[Dict[str, Any
                 continue
 
 
-            # 构建上下文：向上爬10层寻找套餐信息容器
+            # 构建上下文：向上爬10层寻找套餐信息容器，但最多只爬到最近的
+            # <section> 边界——多个套餐卡片（如"家庭計劃"和"+ 擴充包 家庭計劃"）
+            # 常常是相邻的 <section> 共享同一个父容器，越过 section 边界继续爬
+            # 会把邻近套餐的文字（含 Expansion Pack 关键词）也吃进 context_text，
+            # 导致普通套餐被误判为含 Expansion Pack
             context_parts = [elem_text]
             current = elem.parent
             for _ in range(10):
@@ -167,6 +171,8 @@ def extract_prices_from_html(html: str, country_code: str) -> List[Dict[str, Any
                     # 限制单个父元素不超过500字符（避免包含整页）
                     if len(parent_text) < 500:
                         context_parts.append(parent_text)
+                        if current.name == 'section':
+                            break
                         current = current.parent
                     else:
                         break
