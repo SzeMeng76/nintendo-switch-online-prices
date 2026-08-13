@@ -210,15 +210,23 @@ def extract_prices_from_html(html: str, country_code: str) -> List[Dict[str, Any
             # 识别时长：优先在当前元素查找
             duration = None
             duration_months = None
+            elem_price_pos = elem_text.find(price_text)
 
-            # 先在当前元素内查找（繁简体中文都支持，日文支持ヶ月和か月两种写法）
-            if DURATION_12_PATTERN.search(elem_text):
+            # 先在当前元素内查找时长；但只看价格前面一小段文本，不是整个 elem_text——
+            # 免费试用说明这类元素会把 1/3/12 个月的价格连续列在一起，如果不限定范围，
+            # 价格明明是"1个月 3.99€"，却可能因为文本后段提到"12个月"而被误判成12个月
+            if elem_price_pos >= 0:
+                elem_local = elem_text[max(0, elem_price_pos - 60):elem_price_pos + len(price_text)]
+            else:
+                elem_local = elem_text
+
+            if DURATION_12_PATTERN.search(elem_local):
                 duration = "12 months"
                 duration_months = 12
-            elif DURATION_3_PATTERN.search(elem_text):
+            elif DURATION_3_PATTERN.search(elem_local):
                 duration = "3 months"
                 duration_months = 3
-            elif DURATION_1_PATTERN.search(elem_text):
+            elif DURATION_1_PATTERN.search(elem_local):
                 duration = "1 month"
                 duration_months = 1
 
