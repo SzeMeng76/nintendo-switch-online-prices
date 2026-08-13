@@ -79,10 +79,11 @@ NINTENDO_COUNTRIES = {
 CURRENCY_SYMBOLS = "\\$\u20ac\u00a3\u00a5\u20b9\u20b1\u20aa\u20a8\u20a6\u20b5\u20a1\u20a9"
 
 # Expansion Pack（追加内容包）关键词，覆盖各官网语言版本
-# 英/法/德/西/意/葡/日/中(简繁)/韩
+# 英/法/德/西/意/葡/荷/日/中(简繁)/韩
 EXPANSION_PACK_PATTERN = re.compile(
     r'expansion\s*pack|pack\s*additionnel|pass\s*additionnel|erweiterungspaket|erweiterung|'
-    r'paquete\s*de\s*expansi[oó]n|pacchetto\s*aggiuntivo|pacote\s*adicional|'
+    r'paquete\s*de\s*expansi[oó]n|pacchetto\s*aggiuntivo|pacote\s*adicional|pack\s*de\s*expans[aã]o|'
+    r'uitbreidingspakket|'
     r'追加パック|追加内容包|追加內容包|扩充包|擴充包|추가팩',
     re.IGNORECASE
 )
@@ -91,9 +92,10 @@ EXPANSION_PACK_PATTERN = re.compile(
 # 命中后要从待匹配文本中先剔除，避免把基础版套餐误判为含 Expansion Pack
 # （例如日文"追加パックなし"、繁体中文"不含擴充包"本身就包含 EXPANSION_PACK_PATTERN 的关键词）
 EXPANSION_PACK_NEGATION_PATTERN = re.compile(
-    r'(no|without|sans|sin|ohne|senza|sem|不含|不包含|不附)\s*'
+    r'(no|without|sans|sin|ohne|senza|sem|zonder|不含|不包含|不附)\s*'
     r'(the\s+)?(expansion\s*pack|pack\s*additionnel|pass\s*additionnel|erweiterungspaket|erweiterung|'
-    r'paquete\s*de\s*expansi[oó]n|pacchetto\s*aggiuntivo|pacote\s*adicional|'
+    r'paquete\s*de\s*expansi[oó]n|pacchetto\s*aggiuntivo|pacote\s*adicional|pack\s*de\s*expans[aã]o|'
+    r'uitbreidingspakket|'
     r'追加パック|追加内容包|追加內容包|扩充包|擴充包|추가팩)'
     r'|(expansion\s*pack|추가팩|追加パック)\s*(なし|無し|미포함|없음)',
     re.IGNORECASE
@@ -104,6 +106,19 @@ def text_has_expansion_pack(text: str) -> bool:
     """判断文本中是否提到"含 Expansion Pack"，会先剔除各语言否定表述避免误判"""
     cleaned = EXPANSION_PACK_NEGATION_PATTERN.sub(' ', text)
     return bool(EXPANSION_PACK_PATTERN.search(cleaned))
+
+
+# 套餐类型关键词：用词干而不是整词匹配，覆盖同一拉丁词根在各语言里的不同词尾
+# （如 individual/individuel/individuale/individueel，family/familia/famille/familie/familiar）
+# 德语"个人"用的是完全不同的词根，单独列出
+INDIVIDUAL_TYPE_PATTERN = re.compile(r'individu\w*|einzel|個人|个人|personal|solo|개인', re.IGNORECASE)
+FAMILY_TYPE_PATTERN = re.compile(r'famil\w*|家庭|ファミリー|가족|패밀리', re.IGNORECASE)
+
+# 时长关键词：德语 Monat(e)、意大利语 mese/mesi、荷兰语 maand(en) 是各自独立的词根，
+# 不能靠英文/西语/法语的 month/meses/mois 覆盖到，需要单独列出
+DURATION_12_PATTERN = re.compile(r'12\s*month|12\s*meses|12\s*mois|12\s*mes[ei]|12\s*monate?|12\s*maand\w*|12\s*ヶ月|12\s*か月|12\s*个月|12\s*個月|1\s*year|1\s*año|1\s*jahr|年間', re.IGNORECASE)
+DURATION_3_PATTERN = re.compile(r'3\s*month|3\s*meses|3\s*mois|3\s*mes[ei]|3\s*monate?|3\s*maand\w*|3\s*ヶ月|3\s*か月|3\s*个月|3\s*個月', re.IGNORECASE)
+DURATION_1_PATTERN = re.compile(r'1\s*month|1\s*meses|1\s*mois|1\s*mes[ei]|1\s*monate?|1\s*maand\w*|1\s*ヶ月|1\s*か月|1\s*个月|1\s*個月|monthly|mensual', re.IGNORECASE)
 
 
 def extract_prices_from_html(html: str, country_code: str) -> List[Dict[str, Any]]:
@@ -162,28 +177,33 @@ def extract_prices_from_html(html: str, country_code: str) -> List[Dict[str, Any
 
             # 识别套餐类型：优先在当前元素查找，避免跨套餐混淆
             plan_type = "Unknown"
-            if re.search(r'\bfamily\b|家庭|ファミリー|familia|famille|familie', elem_text, re.IGNORECASE):
+            if FAMILY_TYPE_PATTERN.search(elem_text):
                 plan_type = "Family"
-            elif re.search(r'\bindividual\b|個人|个人|personal|solo', elem_text, re.IGNORECASE):
+            elif INDIVIDUAL_TYPE_PATTERN.search(elem_text):
                 plan_type = "Individual"
-            elif re.search(r'\bfamily\b|家庭|ファミリー|familia|famille|familie', context_text, re.IGNORECASE):
+            elif FAMILY_TYPE_PATTERN.search(context_text):
                 plan_type = "Family"
-            elif re.search(r'\bindividual\b|個人|个人|personal|solo', context_text, re.IGNORECASE):
+            elif INDIVIDUAL_TYPE_PATTERN.search(context_text):
                 plan_type = "Individual"
 
             # 仍未识别出套餐类型时（价格与套餐标题之间夹着长段免费试用/法律说明文字，
-            # 被上面500字符上限截断导致爬不到），单独再向上爬，只用于判断类型、不限制长度
+            # 被上面500字符上限截断导致爬不到），单独再向上爬；但最多只爬到最近的
+            # <section> 边界就必须停下——继续往上爬会爬进相邻的另一个套餐区块，
+            # 条款文字里常出现"family group members' individual membership"这种
+            # 跨套餐交叉引用，不设边界会把 Individual 套餐误判成 Family（反之亦然）
             if plan_type == "Unknown":
                 type_ancestor = elem.parent
                 for _ in range(25):
                     if not type_ancestor or not type_ancestor.name:
                         break
                     ancestor_text = type_ancestor.get_text(' ', strip=True)
-                    if re.search(r'\bfamily\b|家庭|ファミリー|familia|famille|familie', ancestor_text, re.IGNORECASE):
+                    if FAMILY_TYPE_PATTERN.search(ancestor_text):
                         plan_type = "Family"
                         break
-                    elif re.search(r'\bindividual\b|個人|个人|personal|solo', ancestor_text, re.IGNORECASE):
+                    elif INDIVIDUAL_TYPE_PATTERN.search(ancestor_text):
                         plan_type = "Individual"
+                        break
+                    if type_ancestor.name == 'section':
                         break
                     type_ancestor = type_ancestor.parent
 
@@ -192,13 +212,13 @@ def extract_prices_from_html(html: str, country_code: str) -> List[Dict[str, Any
             duration_months = None
 
             # 先在当前元素内查找（繁简体中文都支持，日文支持ヶ月和か月两种写法）
-            if re.search(r'12\s*month|12\s*meses|12\s*mois|12\s*ヶ月|12\s*か月|12\s*个月|12\s*個月|1\s*year|1\s*año|1\s*jahr|年間', elem_text, re.IGNORECASE):
+            if DURATION_12_PATTERN.search(elem_text):
                 duration = "12 months"
                 duration_months = 12
-            elif re.search(r'3\s*month|3\s*meses|3\s*mois|3\s*ヶ月|3\s*か月|3\s*个月|3\s*個月', elem_text, re.IGNORECASE):
+            elif DURATION_3_PATTERN.search(elem_text):
                 duration = "3 months"
                 duration_months = 3
-            elif re.search(r'1\s*month|1\s*meses|1\s*mois|1\s*ヶ月|1\s*か月|1\s*个月|1\s*個月|monthly|mensual', elem_text, re.IGNORECASE):
+            elif DURATION_1_PATTERN.search(elem_text):
                 duration = "1 month"
                 duration_months = 1
 
@@ -214,13 +234,13 @@ def extract_prices_from_html(html: str, country_code: str) -> List[Dict[str, Any
                     local_context = context_text[:len(context_text)//2]  # 前半部分
 
                 # 在局部上下文里搜索，按12/3/1顺序（繁简体中文都支持，日文支持ヶ月和か月两种写法）
-                if re.search(r'12\s*month|12\s*meses|12\s*mois|12\s*ヶ月|12\s*か月|12\s*个月|12\s*個月|1\s*year|1\s*año|1\s*jahr|年間', local_context, re.IGNORECASE):
+                if DURATION_12_PATTERN.search(local_context):
                     duration = "12 months"
                     duration_months = 12
-                elif re.search(r'3\s*month|3\s*meses|3\s*mois|3\s*ヶ月|3\s*か月|3\s*个月|3\s*個月', local_context, re.IGNORECASE):
+                elif DURATION_3_PATTERN.search(local_context):
                     duration = "3 months"
                     duration_months = 3
-                elif re.search(r'1\s*month|1\s*meses|1\s*mois|1\s*ヶ月|1\s*か月|1\s*个月|1\s*個月|monthly|mensual', local_context, re.IGNORECASE):
+                elif DURATION_1_PATTERN.search(local_context):
                     duration = "1 month"
                     duration_months = 1
 
@@ -293,8 +313,7 @@ def extract_prices_from_text(text: str, country_code: str) -> List[Dict[str, Any
 
         # 识别套餐类型
         plan_type = 'Individual'
-        family_pattern = re.compile(r'family|famil|familia|famille|familie|家庭|ファミリー', re.IGNORECASE)
-        if family_pattern.search(context_text):
+        if FAMILY_TYPE_PATTERN.search(context_text):
             plan_type = 'Family'
 
         # 识别时长
