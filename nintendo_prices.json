@@ -46,7 +46,7 @@
       "duration_months": 12,
       "has_expansion_pack": true,
       "price": "5,900円",
-      "raw_context": "12か月 (365日間) 5,900円 ひと月あたり 約492円 購入にすすむ Nintendo Switch Online + 追加パック 個人プラン 12か月 (365日間) 5,900円 ひと月あたり 約492円 購入にすすむ Nintendo Switch Online 個人プラン 7日間 無料体験 7日間の無料体験終了後は、 400円 /30日間の個人プラン（追加パックなし）を自動継続購",
+      "raw_context": "12か月 (365日間) 5,900円 ひと月あたり 約492円 購入にすすむ Nintendo Switch Online + 追加パック 個人プラン 12か月 (365日間) 5,900円 ひと月あたり 約492円 購入にすすむ",
       "country_code": "JP",
       "country_name": "Japan",
       "currency": "JPY",
@@ -133,11 +133,11 @@
       "url": "https://ec.nintendo.com/HK/zh/membership"
     },
     {
-      "plan": "Family - 12 months + Expansion Pack",
+      "plan": "Family - 12 months",
       "plan_type": "Family",
       "duration": "12 months",
       "duration_months": 12,
-      "has_expansion_pack": true,
+      "has_expansion_pack": false,
       "price": "HKD 295",
       "raw_context": "12個月 (365天) HKD 295 12個月 (365天) HKD 295 一個月約HKD 25 購買 12個月 (365天) HKD 295 一個月約HKD 25 購買 12個月 (365天) HKD 295 一個月約HKD 25 購買 12個月 (365天) HKD 295 一個月約HKD 25 購買 Nintendo Switch Online 家庭計劃 12個月 (365天) HKD ",
       "country_code": "HK",
@@ -454,11 +454,11 @@
       "url": "https://ec.nintendo.com/TW/zh/membership"
     },
     {
-      "plan": "Family - 12 months + Expansion Pack",
+      "plan": "Family - 12 months",
       "plan_type": "Family",
       "duration": "12 months",
       "duration_months": 12,
-      "has_expansion_pack": true,
+      "has_expansion_pack": false,
       "price": "TWD 1,179",
       "raw_context": "12個月 (365天) TWD 1,179 12個月 (365天) TWD 1,179 一個月約TWD 99 購買 12個月 (365天) TWD 1,179 一個月約TWD 99 購買 12個月 (365天) TWD 1,179 一個月約TWD 99 購買 12個月 (365天) TWD 1,179 一個月約TWD 99 購買 Nintendo Switch Online 家庭計劃 12個月 (",
       "country_code": "TW",
