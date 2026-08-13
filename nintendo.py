@@ -153,6 +153,22 @@ def extract_prices_from_html(html: str, country_code: str) -> List[Dict[str, Any
             elif re.search(r'\bindividual\b|個人|个人|personal|solo', context_text, re.IGNORECASE):
                 plan_type = "Individual"
 
+            # 仍未识别出套餐类型时（价格与套餐标题之间夹着长段免费试用/法律说明文字，
+            # 被上面500字符上限截断导致爬不到），单独再向上爬，只用于判断类型、不限制长度
+            if plan_type == "Unknown":
+                type_ancestor = elem.parent
+                for _ in range(25):
+                    if not type_ancestor or not type_ancestor.name:
+                        break
+                    ancestor_text = type_ancestor.get_text(' ', strip=True)
+                    if re.search(r'\bfamily\b|家庭|ファミリー|familia|famille|familie', ancestor_text, re.IGNORECASE):
+                        plan_type = "Family"
+                        break
+                    elif re.search(r'\bindividual\b|個人|个人|personal|solo', ancestor_text, re.IGNORECASE):
+                        plan_type = "Individual"
+                        break
+                    type_ancestor = type_ancestor.parent
+
             # 识别时长：优先在当前元素查找
             duration = None
             duration_months = None
