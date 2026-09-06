@@ -381,8 +381,10 @@ async def fetch_country_prices(page: Page, country_code: str, country_info: Dict
     url = f"https://ec.nintendo.com/{country_code}/{lang}/membership"
 
     try:
-        # 访问页面并等待网络空闲
-        await page.goto(url, wait_until='networkidle', timeout=60000)
+        # 访问页面。Nintendo eShop 页面存在持续的后台请求（埋点/轮询），
+        # 'networkidle' 永远等不到网络空闲从而必然超时，改用 'load' 即可，
+        # 页面内容在 load 事件时已经完整。
+        await page.goto(url, wait_until='load', timeout=30000)
 
         # 额外等待确保 JavaScript 完全执行
         await page.wait_for_timeout(3000)
